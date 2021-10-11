@@ -1,0 +1,22 @@
+{
+  "name": "shtopw",
+  "version": "0.0.1",
+  "description": "sh to pwsh",
+  "main": "./main.js",
+  "bin": "./bin/shtopw",
+  "files": [
+    "./README.md",
+    "./LICENSE",
+    "./main.js",
+    "./bin/shtopw"
+  ],
+  "scripts": {
+    "test": "node ./scripts/test.js",
+    "build": "node ./scripts/build.js"
+  },
+  "author": "Grenier Célestin",
+  "license": "ISC",
+  "dependencies": {
+    "bash-parser": "^0.5.0"
+  }
+}
