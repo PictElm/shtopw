@@ -2,7 +2,9 @@
 
   /**
    * @typedef {Object} Options
-   * @property {string} hey
+   * @property {string} mode 'bash' | 'posix', default 'posix'
+   * @property {string} shebang default "#!/usr/bin/env pwsh"
+   * @property {string} EOL default "\n"
    * 
    * @param {string} _source
    * @param {Options} _options
@@ -10,14 +12,22 @@
    */
   var r = function(_source, _options) {
     _source = _source.toString();
-    if (!_options) _options = r.defaultOptions;
+    _options = Object.assign(Object.create(r.defaultOptions), _options);
 
-    /*-*/ console.dir(require('bash-parser')(_source), { depth: 42 });
+    /*-* / console.dir(require('bash-parser')(_source, _options), { depth: 42 });
+     */
 
-    return "";
+    return [
+      _options.shebang,
+      "Write-Error 'Not implemented yet'",
+      ""
+    ].join(_options.EOL);
   };
 
   /** @type {Options} */
-  r.defaultOptions = {};
+  r.defaultOptions = {
+    shebang: "#!/usr/bin/env pwsh",
+    EOL: "\n"
+  };
 
 return r;})();

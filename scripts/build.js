@@ -6,6 +6,8 @@ function main(argv) {
    * @property {string[]} $
    * @property {string?} source
    * @property {string?} file
+   * @property {string?} mode 'bash' | 'posix', default 'posix'
+   * @property {string?} shebang default "#!/usr/bin/env pwsh"
    */
   /** @type {Arguments} */
   const args = { $: [] };
@@ -34,17 +36,22 @@ function main(argv) {
     } else args.$.push(it);
   });
   delete tmp;
-  /*---*/
   var file = args.file || args.$[0] || "";
+  var opts = {
+    file: file,
+    mode: args.mode,
+    shebang: args.shebang,
+    EOL: require('os').EOL
+  };
   (file
     ? require('fs/promises').readFile(file).then(bf => bf.toString())
     : Promise.resolve(args.source || " ")
   )
-  .then(sh => {
+  .then(src => {
     try {
-      console.log(require('..')(sh));
+      console.log(require('..')(src, opts));
     } catch {
-      console.log(require('shtopw')(sh));
+      console.log(require('shtopw')(src, opts));
     }
   });
 }
@@ -61,7 +68,7 @@ fs.access("bin")
       [
         "#!/usr/bin/env node",
         main.toString().replace(/\r?\n/g, EOL),
-        "main(process.argv.slice(1/*?*/));",
+        "main(process.argv.slice(1));",
         ""
       ].join(EOL)
     )

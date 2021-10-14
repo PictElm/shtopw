@@ -1,55 +1,80 @@
 #!/usr/bin/env node
+const shtopw = require('..');
+
 const fs = require('fs/promises');
+const readdir = require('fs').readdirSync;
 const path = require('path');
-const parse = require('bash-parser');
+const EOL = require('os').EOL;
+const cp = require('child_process');
 
-function clean(sh) {
-  return sh
-    //.replace("\r", "")
-    //.split("\n")
-    //.map(it => it
-    //  .trim()
-    //)
-    //.join("\n")
+process.chdir(__dirname);
+const base = path.relative(__dirname, path.join("..", "tests"));
+process.chdir(base);
+
+var theCwd = path.resolve(base, "playground");
+var theEnv = {};
+var theOpts = {};
+
+/**
+ * @typedef {Object} Result
+ * @property {number} code
+ * @property {string} stdout
+ * @property {string} stderr
+ * 
+ * @returns {Result}
+ */
+function runWith(shell, args, env) {
+  return new Promise((resolve, reject) => {
+    try {
+      const sp = cp.spawn(
+        shell, args,
+        {
+          cwd: theCwd,
+          env: Object.assign(Object.create(theEnv), env),
+        }
+      );
+
+      let stdout = "";
+      let stderr = "";
+      sp.stdout.on('data', data => stdout+= data);
+      sp.stderr.on('data', data => stderr+= data);
+
+      sp.on('close', code => resolve({
+        code: code,
+        stdout: stdout.replace(/\r?\n/g, EOL),
+        stderr: stderr.replace(/\r?\n/g, EOL),
+      }));
+    } catch (err) {
+      reject(err);
+    }
+  });
 }
 
-function getSnippets(dir) {
-  return fs
-    .readdir(dir)
-    .then(ls => ls
-      .map(fn => fs.readFile(path.join(dir, fn)))
-    )
-    .then(ps => Promise.all(ps)
-      .then(ls => ls
-        .flatMap(bf => {
-          const st = clean(bf.toString());
-          const ln = st.split("\n")[0]
-          return ln.startsWith("#!/bin/sh") || ln.startsWith("#!/bin/bash")
-            ? [st]
-            : [];
-        })
-      )
-    );
-}
+if (!globalThis.describe) globalThis.describe = (_, cb) => cb();
+if (!globalThis.test) globalThis.test = async (_, cb) => await cb();
+if (!globalThis.expect) globalThis.expect = new Proxy(o => {console.dir(o);return globalThis.expect}, { get: (_,p) => {console.log(p);return globalThis.expect} });
 
-function getSnippet(dir, name) {
-  return fs
-    .readFile(path.join(dir, name))
-    .then(bf => clean(bf.toString()));
-}
+readdir("snippets")
+  .map(folder => {
+    describe(folder, () => {
+      readdir(path.join("snippets", folder))
+        .filter(it => it.endsWith(".sh"))
+        .map(file => {
+          test(file.replace(".sh", ""), async () => {
+            const ps1 = path.win32.join("snippets", folder, file.replace(".sh", ".ps1"));
+            const sh = path.posix.join("snippets", folder, file);
 
-/*getSnippets("snippets")
-  .then(ls => ls
-    .forEach(sh => {
-      console.log(sh);
-      console.log("---");
-    })
-  );*/
+            const src = (await fs.readFile(sh)).toString();
+            const json = src.split("\n", 2)[1].trim().slice(2);
+            const opts = Object.assign(Object.create(theOpts), JSON.parse(json));
 
-/*-*/
-getSnippet("snippets", "lustre")
-    .then(sh => {
-      console.log(sh);
-      console.log("\n===\n");
-      console.dir(parse(sh), { depth: 42 });
+            const res = shtopw(src, opts);
+            await fs.writeFile(ps1, res);
+
+            const received = await runWith("pwsh", ["-nop", "-f", path.win32.join("..", ps1)], opts.env);
+            const expected = await runWith("sh", [path.posix.join("..", sh), "--noprofile", "--norc"], opts.env);
+            expect(received).toEqual(expected);
+          });
+        });
     });
+  });

@@ -2,6 +2,8 @@
   "name": "shtopw",
   "version": "0.0.1",
   "description": "sh to pwsh",
+  "author": "Grenier Célestin",
+  "license": "ISC",
   "main": "./main.js",
   "bin": "./bin/shtopw",
   "files": [
@@ -10,13 +12,25 @@
     "./main.js",
     "./bin/shtopw"
   ],
+  "jest": {
+    "coverageThreshold": {
+      "global": {
+        "branches": 100,
+        "functions": 100,
+        "lines": 100,
+        "statements": 100
+      }
+    },
+    "testTimeout": 50000
+  },
   "scripts": {
-    "test": "node ./scripts/test.js",
+    "test": "jest --coverage",
     "build": "node ./scripts/build.js"
   },
-  "author": "Grenier Célestin",
-  "license": "ISC",
   "dependencies": {
     "bash-parser": "^0.5.0"
+  },
+  "devDependencies": {
+    "jest": "^27.2.5"
   }
 }
