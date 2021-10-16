@@ -1,3 +1,4 @@
-#!/usr/bin/env bash
+#!/bin/sh
 #:{}
 echo 'hello world!'
+echo hello again
