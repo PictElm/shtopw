@@ -21,7 +21,7 @@ var theOpts = {};
  * @property {string} stdout
  * @property {string} stderr
  * 
- * @returns {Result}
+ * @returns {Promise<Result>}
  */
 function runWith(shell, args, env) {
   return new Promise((resolve, reject) => {
@@ -71,8 +71,8 @@ readdir("snippets")
             const res = shtopw(src, opts);
             await fs.writeFile(ps1, res);
 
-            const received = runWith("pwsh", ["-nop", "-f", path.win32.join("..", ps1)], opts.env);
-            const expected = runWith("sh", [path.posix.join("..", sh), "--noprofile", "--norc"], opts.env);
+            const received = await runWith("pwsh", ["-nop", "-f", path.win32.join("..", ps1)], opts.env);
+            const expected = await runWith("sh", [path.posix.join("..", sh), "--noprofile", "--norc", "--posix"], opts.env);
             expect(received).toEqual(expected);
           });
         });

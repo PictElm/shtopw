@@ -69,9 +69,9 @@
 
     command: {
       // TODO
-      'echo': 'Write-Output',
+      'echo': 'Write-Output', // XXX: new lines between words (instead of spaces)
       'cat': 'Get-Content', // XXX: no pipeline input
-      'ls': 'Get-ChildItem', // XXX: outputs not comparable
+      'ls': 'Get-ChildItem -Name',
     },
 
     node: {
@@ -107,32 +107,33 @@
        * }
        */
       Word: function(node, context) {
-        if (node.expansion) {
+        var expansions = sanitizedExpansion(node.expansion);
+        if (expansions) {
           var s = [], at = 1;
-          for (var it of node.expansion) if (sanityCheck(it.loc)) {
-            s.push(node.text.slice(at, it.loc.start));
-            at = it.loc.end+1;
+          for (var ex of expansions) {
+            s.push(node.text.slice(at, ex.loc.start));
+            at = ex.loc.end+1;
 
-            switch (it.type) {
+            switch (ex.type) {
               case 'ArithmeticExpansion': {
                 // @see https://www.gnu.org/software/bash/manual/html_node/Shell-Arithmetic.html
                 // note: operators, which are Bash? which are POSIX?
-                s.push("$(" + it.expression + ")");
+                s.push("$(" + ex.expression + ")");
               } break;
 
               case 'CommandExpansion': {
                 var past = context.ast;
-                context.ast = it.commandAST;
-                s.push("$(" + handle(it.commandAST, context).join("; ") + ")"); // type: 'Script'
+                context.ast = ex.commandAST;
+                s.push("$(" + handle(ex.commandAST, context).join("; ") + ")"); // type: 'Script'
                 context.ast = past;
               } break;
 
               case 'ParameterExpansion': {
-                var h = context.handlers.variable[it.parameter];
+                var h = context.handlers.variable[ex.parameter];
                 if (h) { // special-case env variable (eg. $RANDOM)
                   // TODO
                   s.push(h);
-                } else s.push("$" + it.parameter);
+                } else s.push("$" + ex.parameter);
               } break;
             }
           }
@@ -178,8 +179,9 @@
                 text: it.text.slice(k+1),
                 expansion: [],
               };
-              if (it.expansion) {
-                for (var ex of it.expansion) {
+              var expansions = sanitizedExpansion(it.expansion);
+              if (expansions) {
+                for (var ex of expansions) {
                   var re = { loc: {
                     start: ex.loc.start - k,
                     end: ex.loc.end - k,
@@ -202,12 +204,12 @@
         var com = node.name;
         var h = com && context.handlers.command[com.text];
 
-        if (com && com.expansion) // variable as command
+        if (com && sanitizedExpansion(com.expansion)) // variable as command
           h = "& " + handle(com, context)[0]; // type: 'Word'
 
         // istanbul ignore else
         if (h) {
-          if ("string" === typeof h) { // command has direct translation (eg. echo -> Write-Output)
+          if ("string" === typeof h) { // command has direct translation
             var s = [h];
             if (node.suffix) for (var it of node.suffix) { // argument list
               if ('Redirect' === it.type) {
@@ -253,8 +255,13 @@
    * @param {{ start: number, end: number }} nodeLoc
    * @returns {boolean}
    */
-  function sanityCheck(nodeLoc) {
-    return -1 < nodeLoc.start && -1 < nodeLoc.end;
+  function sanitizedExpansion(expansion) {
+    if (!expansion) return;
+    var r = [];
+    for (var ex of expansion)
+      if (-1 < ex.loc.start && -1 < ex.loc.end)
+        r.push(ex);
+    return !!r.length && r;
   }
 
 return r;})();
