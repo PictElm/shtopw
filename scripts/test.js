@@ -72,7 +72,10 @@ readdir("snippets")
             await fs.writeFile(ps1, res);
 
             const received = await runWith("pwsh", ["-nop", "-f", path.win32.join("..", ps1)], opts.env);
-            const expected = await runWith("sh", [path.posix.join("..", sh), "--noprofile", "--norc", "--posix"], opts.env);
+            const expected = await runWith("sh", [path.posix.join("..", sh), "--noprofile", "--norc"], opts.env);
+
+            if (opts.ignore) for (const what of opts.ignore) received[what] = expected[what] = null;
+
             expect(received).toEqual(expected);
           });
         });

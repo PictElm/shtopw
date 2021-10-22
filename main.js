@@ -17,6 +17,7 @@
    * @property {?string} mode 'bash' | 'posix', default 'posix'
    * @property {?string} shebang default "#!/usr/bin/env pwsh"
    * @property {?string} EOL default "\n"
+   * @property {?string} indent sequence used to indent, default 4 spaces
    * @property {?Handlers} handlers
    * 
    * @typedef {Object} Context
@@ -25,6 +26,7 @@
    * @property {Handlers} handlers
    * @property {AST} root
    * @property {AST} ast
+   * @property {string} indent
    */
 
   /**
@@ -45,6 +47,7 @@
       handlers: handlers,
       root: ast,
       ast: ast,
+      indent: "",
     };
     var result = handle(ast, context);
 
@@ -59,6 +62,7 @@
   r.defaultOptions = {
     shebang: "#!/usr/bin/env pwsh",
     EOL: "\n",
+    indent: "    ",
   };
 
   /** @type {Handlers} */
@@ -72,6 +76,65 @@
       'echo': 'Write-Output', // XXX: new lines between words (instead of spaces)
       'cat': 'Get-Content', // XXX: no pipeline input
       'ls': 'Get-ChildItem -Name',
+      'source': '.',
+      '[': function(node, context) {
+        var niw = {
+          type: 'Command',
+          name: { type: 'Word', text: 'test' },
+          suffix: node.suffix.slice(0, -1), // remove trailing ']'
+        };
+        return context.handlers.command['test'](niw, context);
+      },
+      'test': function(node, context) { 
+        // @see https://pubs.opengroup.org/onlinepubs/9699919799/utilities/test.html
+        var s = [], args = node.suffix;
+        function ensureQuotes(p) {
+          if ("'\"".indexOf(p.charAt(0)) < 0)
+            p = "'" + p + "'";
+          return p;
+        }
+        for (var k = 0, it; k < args.length; k++) switch ((it = args[k]).text) {
+          case '-d': {
+            s.push('Test-Path -PathType Container -Path');
+            s.push(handle(args[++k], context)[0]);
+          } break;
+
+          case '-f': {
+            s.push('Test-Path -PathType Leaf -Path');
+            s.push(handle(args[++k], context)[0]);
+          } break;
+
+          case '-z': {
+            s.push("0 -eq");
+            s.push(ensureQuotes(handle(args[++k], context)[0]) + ".Length");
+          } break;
+
+          case '-n': {
+            s.push("0 -ne");
+            s.push(ensureQuotes(handle(args[++k], context)[0]) + ".Length");
+          } break;
+
+          case '=': {
+            s[s.length-1] = ensureQuotes(s[s.length-1]);
+            s.push("-ceq");
+            s.push(ensureQuotes(handle(args[++k], context)[0]));
+          } break;
+
+          case '!=': {
+            s[s.length-1] = ensureQuotes(s[s.length-1]);
+            s.push("-cne");
+            s.push(ensureQuotes(handle(args[++k], context)[0]));
+          } break;
+
+          case '!': s.push("-not"); break;
+          case '-o': s.push("-or"); break;
+          case '-a': s.push("-and"); break;
+          case '-eq': case '-ne': case '-gt': case '-ge': case '-lt': case '-le': s.push(it.text); break;
+
+          default: s.push(handle(it, context)[0]);
+        }
+        return [s.join(" ")];
+      },
     },
 
     node: {
@@ -110,6 +173,8 @@
         var expansions = sanitizedExpansion(node.expansion);
         if (expansions) {
           var s = [], at = 1;
+          var pindent = context.indent;
+          context.indent = "";
           for (var ex of expansions) {
             s.push(node.text.slice(at, ex.loc.start));
             at = ex.loc.end+1;
@@ -137,6 +202,7 @@
               } break;
             }
           }
+          context.indent = pindent;
           s.push(node.text.slice(at, -1));
 
           return ['"' + s.join("") + '"'];
@@ -161,14 +227,17 @@
        */
       Command: function(node, context) {
         var r = [];
+        function newline(line) { r.push(context.indent + line); }
+        function newlines(lines) { for (var ln of lines) newline(ln); }
 
         if (node.prefix) {
           for (var it of node.prefix) {
+            // istanbul ignore if
             if ('Redirect' === it.type) {
               // TODO
               //s.push(it.op.text);
               //s.push(handle(it.file, context)[0]); // type: 'Word'
-              r.push(`Write-Warning '"prefix redirect": Not implemented yet'`)
+              newline(`Write-Warning '"prefix redirect": Not implemented yet'`)
             } else {
               var k = it.text.indexOf("=");
               var s = ["$" + it.text.slice(0, k), "="];
@@ -190,13 +259,13 @@
                 }
               } else delete word.expansion;
 
-              var v = handle(word, context)[0];
+              var v = handle(word, context)[0]; // type: 'Word'
               // XXX: hacky, does other things than assignment need a word to always be quotted?
               if ("$" !== v.charAt(0) && '"' !== v.charAt(0) && "'" !== v.charAt(0))
                 v = "'" + v + "'";
 
               s.push(v); // type: 'Word'
-              r.push(s.join(" "));
+              newline(s.join(" "));
             }
           };
         }
@@ -217,9 +286,9 @@
                 s.push(handle(it.file, context)[0]); // type: 'Word'
               } else s.push(handle(it, context)[0]); // type: 'Word'
             }
-            r.push(s.join(" "));
-          } else r.push.apply(r, h(node, context)); // command has specified handler
-        } else if (com) r.push(`Write-Error '"${com.text}": Not implemented yet'`);
+            newline(s.join(" "));
+          } else newlines(h(node, context)); // command has specified handler
+        } else if (com) newline(`Write-Error '"${com.text}": Not implemented yet'`);
 
         return r;
       },
@@ -234,7 +303,55 @@
         for (var com of node.commands)
           s.push(handle(com, context));
 
-        return [s.join(" | ")];
+        return [context.indent + s.join(" | ")];
+      },
+
+      /**
+       * a `LogicalExpression` represents two commands concateneted with a && a ||
+       *  .left: Node
+       *  .right: Node
+       *  .op: '&&' | '||'
+       */
+      LogicalExpression: function(node, context) {
+        var s = [
+          handle(node.left, context),
+          "or" === node.op ? "||" : "&&",
+          handle(node.right, context),
+        ];
+        return [context.indent + s.join(" ")];
+      },
+
+      /**
+       * the `If` conditional statement
+       *  .clause: Array<Node>
+       *  .then: Array<Node>
+       *  .else: Array<Node>
+       */
+      If: function(node, context) {
+        var r = [];
+
+        var s = [];
+        for (var com of node.clause.commands)
+          s.push.apply(s, handle(com, context));
+        r.push("if (" + s.join(" ") + ") {"); // TODO/XXX
+
+        var pindent = context.indent;
+        context.indent+= context.options.indent;
+
+        for (var com of node.then.commands)
+          r.push.apply(r, handle(com, context));
+
+        if (node['else']) {
+          r.push("} else {");
+          for (var com of node['else'].commands)
+            r.push.apply(r, handle(com, context));
+        }
+
+        r.push("}");
+        r.push("");
+        context.indent = pindent;
+
+        return r;
       },
     },
   };
