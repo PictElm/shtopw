@@ -170,12 +170,11 @@
        * }
        */
       Word: function(node, context) {
-        var expansions = sanitizedExpansion(node.expansion);
-        if (expansions) {
+        if (node.expansion) {
           var s = [], at = 1;
           var pindent = context.indent;
           context.indent = "";
-          for (var ex of expansions) {
+          for (var ex of node.expansion) {
             s.push(node.text.slice(at, ex.loc.start));
             at = ex.loc.end+1;
 
@@ -248,9 +247,8 @@
                 text: it.text.slice(k+1),
                 expansion: [],
               };
-              var expansions = sanitizedExpansion(it.expansion);
-              if (expansions) {
-                for (var ex of expansions) {
+              if (it.expansion) {
+                for (var ex of it.expansion) {
                   var re = { loc: {
                     start: ex.loc.start - k,
                     end: ex.loc.end - k,
@@ -260,8 +258,7 @@
               } else delete word.expansion;
 
               var v = handle(word, context)[0]; // type: 'Word'
-              // XXX: hacky, does other things than assignment need a word to always be quotted?
-              if ("$" !== v.charAt(0) && '"' !== v.charAt(0) && "'" !== v.charAt(0))
+              if ("$'\"".indexOf(v.charAt(0)) < 0)
                 v = "'" + v + "'";
 
               s.push(v); // type: 'Word'
@@ -273,7 +270,7 @@
         var com = node.name;
         var h = com && context.handlers.command[com.text];
 
-        if (com && sanitizedExpansion(com.expansion)) // variable as command
+        if (com && com.expansion) // variable as command
           h = "& " + handle(com, context)[0]; // type: 'Word'
 
         // istanbul ignore else
@@ -366,19 +363,6 @@
         // istanbul ignore next
         function(){return[`Write-Error 'Node ${node.type || node}: Not implemented yet'`];}
       )(node, context);
-  }
-
-  /**
-   * @param {{ start: number, end: number }} nodeLoc
-   * @returns {boolean}
-   */
-  function sanitizedExpansion(expansion) {
-    if (!expansion) return;
-    var r = [];
-    for (var ex of expansion)
-      if (-1 < ex.loc.start && -1 < ex.loc.end)
-        r.push(ex);
-    return !!r.length && r;
   }
 
 return r;})();

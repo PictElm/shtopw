@@ -1,6 +1,6 @@
 {
   "name": "shtopw",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "sh to pwsh",
   "author": "Grenier Célestin",
   "license": "ISC",
@@ -29,7 +29,7 @@
     "dev": "nodemon ./scripts/dev.js -e js,sh"
   },
   "dependencies": {
-    "bash-parser": "^0.5.0"
+    "bash-parser": "github:PictElm/bash-parser"
   },
   "devDependencies": {
     "jest": "^27.2.5"
