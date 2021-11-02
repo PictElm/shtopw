@@ -8,8 +8,7 @@
   "bin": "./bin/shtopw",
   "files": [
     "./README.md",
-    "./LICENSE",
-    "./main.js",
+    "./scripts",
     "./bin/shtopw"
   ],
   "jest": {
@@ -26,6 +25,7 @@
   "scripts": {
     "test": "jest --coverage",
     "build": "node ./scripts/build.js",
+    "postinstall": "npm run build",
     "dev": "nodemon ./scripts/dev.js -e js,sh"
   },
   "dependencies": {
