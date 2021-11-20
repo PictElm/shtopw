@@ -75,6 +75,7 @@
     variable: {
       // TODO
       'RANDOM': "$(Get-Random -Maximum 32768)",
+      '#': "$($args.Count)", // hum
       [defaultSymbol]: function(node, context) {
         var asNumber = +node.parameter;
         if (!isNaN(asNumber))
