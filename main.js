@@ -2,7 +2,7 @@
 
   // istanbul ignore next
   var parser = require('bash-parser')
-    , logger = function(o){/**/("string"===typeof o?console.log(o):console.dir(o,{depth:42}));/**/return o;};
+    , logger = function(o){/**/('string'===typeof o?console.log(o):console.dir(o,{depth:42}));/**/return o;};
 
   var assign = Object.assign
     , create = Object.create;
@@ -58,6 +58,11 @@
     ].join(options.EOL);
   };
 
+  // istanbul ignore next
+  var defaultSymbol = r.defaultSymbol = 'function' === typeof Symbol
+    ? Symbol('default')
+    : '[[default]]';
+
   /** @type {Options} */
   r.defaultOptions = {
     shebang: "#!/usr/bin/env pwsh",
@@ -69,6 +74,15 @@
   r.defaultHandlers = {
     variable: {
       // TODO
+      'RANDOM': "$(Get-Random -Maximum 32768)",
+      [defaultSymbol]: function(node, context) {
+        var asNumber = +node.parameter;
+        if (!isNaN(asNumber))
+          return !asNumber
+            ? "$($myInvocation.MyCommand.Path)" // XXX: absolute path
+            : "$($args[" + (asNumber-1) + "])";
+        return null;
+      },
     },
 
     command: {
@@ -77,6 +91,7 @@
       'cat': 'Get-Content', // XXX: no pipeline input
       'ls': 'Get-ChildItem -Name',
       'source': '.',
+      'shift': 'if (2 -le $args.Count) { $args = @($args[0]) } else { $null, $args = $args }',
       '[': function(node, context) {
         var niw = {
           type: 'Command',
@@ -135,6 +150,7 @@
         }
         return [s.join(" ")];
       },
+      [defaultSymbol]: function(node, context) {},
     },
 
     node: {
@@ -193,9 +209,10 @@
               } break;
 
               case 'ParameterExpansion': {
-                var h = context.handlers.variable[ex.parameter];
-                if (h) { // special-case env variable (eg. $RANDOM)
-                  // TODO
+                var h = context.handlers.variable[ex.parameter] || context.handlers.variable[defaultSymbol];
+                if ('function' === typeof h) h = h(ex, context);
+                if (h) {
+                  // TODO?
                   s.push(h);
                 } else s.push("$" + ex.parameter);
               } break;
@@ -261,21 +278,26 @@
               if ("$'\"".indexOf(v.charAt(0)) < 0)
                 v = "'" + v + "'";
 
-              s.push(v); // type: 'Word'
+              s.push(v);
               newline(s.join(" "));
             }
           };
         }
 
         var com = node.name;
-        var h = com && context.handlers.command[com.text];
+        var h;
 
-        if (com && com.expansion) // variable as command
-          h = "& " + handle(com, context)[0]; // type: 'Word'
+        if (com) {
+          if (com.expansion) // variable as command
+            h = "& " + handle(com, context)[0]; // type: 'Word'
+          else
+            h = context.handlers.command[com.text] || context.handlers.command[defaultSymbol];
+            if ('function' === typeof h) h = h(node, context); // command has specified handler
+        }
 
         // istanbul ignore else
         if (h) {
-          if ("string" === typeof h) { // command has direct translation
+          if ('string' === typeof h) { // command has direct translation
             var s = [h];
             if (node.suffix) for (var it of node.suffix) { // argument list
               if ('Redirect' === it.type) {
@@ -284,7 +306,7 @@
               } else s.push(handle(it, context)[0]); // type: 'Word'
             }
             newline(s.join(" "));
-          } else newlines(h(node, context)); // command has specified handler
+          } else newlines(h); // XXX: type checking would not hurt
         } else if (com) newline(`Write-Error '"${com.text}": Not implemented yet'`);
 
         return r;
@@ -350,6 +372,13 @@
 
         return r;
       },
+
+      /**
+       * somehow unknown node type
+       */
+      [defaultSymbol]: /* istanbul ignore next */ function(node, context) {
+        return [`Write-Error 'Node ${node.type || node}: Not implemented yet'`];
+      },
     },
   };
 
@@ -360,8 +389,7 @@
    */
   function handle(node, context) {
     return (node.type && context.handlers.node[node.type] ||
-        // istanbul ignore next
-        function(){return[`Write-Error 'Node ${node.type || node}: Not implemented yet'`];}
+        /* istanbul ignore next */ context.handlers.node[defaultSymbol]
       )(node, context);
   }
 
