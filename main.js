@@ -91,6 +91,7 @@
       'cat': 'Get-Content', // XXX: no pipeline input
       'ls': 'Get-ChildItem -Name',
       'source': '.',
+      'shift': 'if (2 -le $args.Count) { $args = @($args[0]) } else { $null, $args = $args }',
       '[': function(node, context) {
         var niw = {
           type: 'Command',
